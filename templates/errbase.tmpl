@@ -1,4 +1,4 @@
-{{define "layout"}}
+{{define "errbase"}}
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr" data-navigation-type="default" data-navbar-horizontal-shape="default">
 
@@ -11,7 +11,7 @@
     <!-- ===============================================-->
     <!--    Document Title-->
     <!-- ===============================================-->
-    <title>{{template "title"}}</title>
+    <title>{{template "title" .}}</title>
 
     <!-- ===============================================-->
     <!--    Favicons-->
@@ -63,7 +63,7 @@
     <!--    Main Content-->
     <!-- ===============================================-->
     <main class="main" id="top">
-      {{template "body"}}
+      {{template "errindex" .}}
     </main>
     <!-- ===============================================-->
     <!--    JavaScripts-->

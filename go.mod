@@ -1,4 +1,4 @@
-module subsportal
+module github.com/rbaylon/captiveportal
 
 go 1.22.1
 
