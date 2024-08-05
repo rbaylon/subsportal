@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/rbaylon/captiveportal/auth"
+	"github.com/rbaylon/captiveportal/cmd"
 )
 
 var apitoken *string
@@ -43,9 +47,18 @@ func main() {
 	}
 }
 
+func getUnixConn() net.Conn {
+	c, err := net.Dial("unix", auth.GetEnvVariable("UNIX_SOCK"))
+	if err != nil {
+		log.Fatal("Dial error ", err)
+	}
+	return c
+}
+
 func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Captured: ", r.RemoteAddr)
+		remote := strings.Split(r.RemoteAddr, ":")
+		log.Println("Captured: ", remote[0])
 		if r.Method != http.MethodPost {
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
@@ -63,13 +76,32 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 		}
 
 		log.Println(data.Joinnum())
-		v, err := auth.ValidateCode(data.Joinnum(), apitoken)
-		if err != nil {
-			log.Println(err.Error())
+		routerid := auth.GetEnvVariable("ROUTER_ID")
+		urlsuffix := data.Joinnum() + "/" + remote[0] + "/" + routerid
+		result := auth.ValidateCode(urlsuffix, apitoken)
+		if result == "NotFound" {
+			log.Println("Code error: Not Found")
 			tmpl.ExecuteTemplate(w, "errbase", nil)
+			return
 		}
-		log.Println(v)
-
+		pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
+		err := pf["check"].SendCmd(getUnixConn())
+		if err == nil {
+			log.Println("pf.conf valid")
+			time.Sleep(time.Millisecond * 100)
+			pf["backup"].SendCmd(getUnixConn())
+			time.Sleep(time.Millisecond * 100)
+			pf["move"].SendCmd(getUnixConn())
+			time.Sleep(time.Millisecond * 100)
+			err = pf["apply"].SendCmd(getUnixConn())
+			if err != nil {
+				pf["revert"].SendCmd(getUnixConn())
+				log.Println("PF config reverted.")
+			}
+		} else {
+			log.Println("PF config bad: ", err)
+			//ToDo: send sms alert
+		}
 		//redirect to landing page instead of below
 		err = tmpl.ExecuteTemplate(w, "base", nil)
 		if err != nil {

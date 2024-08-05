@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -27,20 +28,44 @@ func (c *Code) Joinnum() string {
 }
 
 type Voucher struct {
-	Value  string `json:"value" bson:"value"`
-	Type   string `json:"type" bson:"type"`
-	Hours  int    `json:"hours" bson:"hours"`
-	Status string `json:"status" bson:"status"`
+	Value         string    `json:"value"`
+	Type          string    `json:"type"`
+	Hours         int       `json:"hours"`
+	Status        string    `json:"status"`
+	Downspeed     int       `json:"downspeed"`
+	Upspeed       int       `json:"upspeed"`
+	Burstspeed    int       `json:"burstspeed"`
+	Duration      int       `json:"duration"`
+	Ip            string    `json:"ip"`
+	DateStarted   time.Time `json:"date_started"`
+	DateEnd       time.Time `json:"date_end"`
+	DateExpires   time.Time `json:"date_expires"`
+	HoursConsumed float64   `json:"hours_consumed"`
+	PfconfigID    uint      `json:"pfconfig_id"`
+}
+
+type Pfiface struct {
+	Name       string `json:"name"`
+	Speed      string `json:"speed"`
+	Device     string `json:"device"`
+	Default    bool   `json:"default"`
+	Type       string `json:"type"`
+	PfconfigID uint   `json:"pfconfig_id"`
+}
+
+type PfConfig struct {
+	Ifaces            []Pfiface `json:"ifaces"`
+	WifiIpList        string    `json:"wifi_ip_list"`
+	SubsIpList        string    `json:"subs_ip_list"`
+	SubsPortalPort    int       `json:"subs_portal_port"`
+	CaptivePortalPort int       `json:"captive_portal_port"`
+	Router            string    `json:"router"`
+	Vouchers          []Voucher `json:"vouchers"`
 }
 
 type Token struct {
 	Name string
 	Jwt  string
-}
-
-type Access struct {
-	Ip   string
-	Code Voucher
 }
 
 func GetEnvVariable(key string) string {
@@ -51,28 +76,29 @@ func GetEnvVariable(key string) string {
 	return os.Getenv(key)
 }
 
-func ValidateCode(code string, t *string) (*Voucher, error) {
+func ValidateCode(code string, t *string) string {
 	var (
 		api_url = GetEnvVariable("API_URL")
 	)
 	url := api_url + "vouchers/value/" + code
-
+	log.Println(url)
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 	res, _ := client.Do(req)
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("Record Not Found")
+	defer res.Body.Close()
+	v := "active"
+	if res.StatusCode == 404 {
+		v = "NotFound"
 	}
-	responseData, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
+	if res.StatusCode == 201 {
+		v = "activated"
 	}
-
-	var v Voucher
-	json.Unmarshal(responseData, &v)
-	log.Println("Received value: ", v.Value)
-	return &v, nil
+	if res.StatusCode == 202 {
+		v = "updated"
+	}
+	log.Println("Code validated")
+	return v
 }
 
 func GetToken() (*string, error) {
@@ -85,6 +111,7 @@ func GetToken() (*string, error) {
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", api_auth))
 	res, err := client.Do(req)
+	defer res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
