@@ -95,6 +95,7 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			time.Sleep(time.Millisecond * 100)
 			err = pf["apply"].SendCmd(getUnixConn())
 			if err != nil {
+				time.Sleep(time.Millisecond * 100)
 				pf["revert"].SendCmd(getUnixConn())
 				log.Println("PF config reverted.")
 			}
@@ -102,11 +103,8 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			log.Println("PF config bad: ", err)
 			//ToDo: send sms alert
 		}
+		time.Sleep(time.Millisecond * 100)
 		//redirect to landing page instead of below
-		err = tmpl.ExecuteTemplate(w, "base", nil)
-		if err != nil {
-			log.Print(err.Error())
-			tmpl.ExecuteTemplate(w, "layout", nil)
-		}
+		http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
 	}
 }

@@ -40,3 +40,8 @@ func GetPFcmds(run_dir string) map[string]*Arkcmd {
 	pfcmds["revert"] = &Arkcmd{"RevertPF", "/bin/mv", []string{"/etc/pf.conf.prev", "/etc/pf.conf"}}
 	return pfcmds
 }
+
+func InsertPFtableCmd(tname string, ip string) *Arkcmd {
+	cmd := &Arkcmd{"UpdateTable", "/sbin/pfctl", []string{"-t", tname, "-T add", ip}}
+	return cmd
+}
