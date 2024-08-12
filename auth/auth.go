@@ -53,6 +53,31 @@ type Pfiface struct {
 	PfconfigID uint   `json:"pfconfig_id"`
 }
 
+type Dhcp struct {
+	Subnet     string `json:"subnet"`
+	Netmask    string `json:"netmask"`
+	Routers    string `json:"routers"`
+	Dnsservers string `json:"dnsservers"`
+	Range      string `json:"range"`
+	Type       string `json:"type"`
+	PfconfigID uint   `json:"pfconfig_id"`
+}
+
+type Sub struct {
+	FirstName  string `json:"first_name"`
+	LastName   string `json:"last_name"`
+	FramedIp   string `json:"framed_ip"`
+	Type       string `json:"type"`
+	Status     string `json:"status"`
+	Mac        string `json:"mac"`
+	Loc        string `json:"loc"`
+	Downspeed  int    `json:"downspeed"`
+	Upspeed    int    `json:"upspeed"`
+	Burstspeed int    `json:"burstspeed"`
+	Duration   int    `json:"duration"`
+	PfConfigID uint   `json:"pfconfig_id"`
+}
+
 type PfConfig struct {
 	Ifaces            []Pfiface `json:"ifaces"`
 	WifiIpList        string    `json:"wifi_ip_list"`
@@ -61,6 +86,8 @@ type PfConfig struct {
 	CaptivePortalPort int       `json:"captive_portal_port"`
 	Router            string    `json:"router"`
 	Vouchers          []Voucher `json:"vouchers"`
+	Dhcps             []Dhcp    `json:"dhcps"`
+	Subs              []Sub     `json:"subs"`
 }
 
 type Token struct {
