@@ -41,6 +41,7 @@ type Voucher struct {
 	DateEnd       time.Time `json:"date_end"`
 	DateExpires   time.Time `json:"date_expires"`
 	HoursConsumed float64   `json:"hours_consumed"`
+	Gateway       string    `json:"gateway"`
 	PfconfigID    uint      `json:"pfconfig_id"`
 }
 
@@ -50,6 +51,7 @@ type Pfiface struct {
 	Device     string `json:"device"`
 	Default    bool   `json:"default"`
 	Type       string `json:"type"`
+	Gateway    string `json:"gateway"`
 	PfconfigID uint   `json:"pfconfig_id"`
 }
 
@@ -71,6 +73,7 @@ type Sub struct {
 	Status     string `json:"status"`
 	Mac        string `json:"mac"`
 	Loc        string `json:"loc"`
+	Gateway    string `json:"gateway"`
 	Downspeed  int    `json:"downspeed"`
 	Upspeed    int    `json:"upspeed"`
 	Burstspeed int    `json:"burstspeed"`
@@ -85,6 +88,7 @@ type PfConfig struct {
 	SubsPortalPort    int       `json:"subs_portal_port"`
 	CaptivePortalPort int       `json:"captive_portal_port"`
 	Router            string    `json:"router"`
+	LoadBalance       bool      `json:"load_balance"`
 	Vouchers          []Voucher `json:"vouchers"`
 	Dhcps             []Dhcp    `json:"dhcps"`
 	Subs              []Sub     `json:"subs"`
