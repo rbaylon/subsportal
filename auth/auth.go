@@ -66,19 +66,21 @@ type Dhcp struct {
 }
 
 type Sub struct {
-	FirstName  string `json:"first_name"`
-	LastName   string `json:"last_name"`
-	FramedIp   string `json:"framed_ip"`
-	Type       string `json:"type"`
-	Status     string `json:"status"`
-	Mac        string `json:"mac"`
-	Loc        string `json:"loc"`
-	Gateway    string `json:"gateway"`
-	Downspeed  int    `json:"downspeed"`
-	Upspeed    int    `json:"upspeed"`
-	Burstspeed int    `json:"burstspeed"`
-	Duration   int    `json:"duration"`
-	PfConfigID uint   `json:"pfconfig_id"`
+	FirstName   string    `json:"first_name"`
+	LastName    string    `json:"last_name"`
+	FramedIp    string    `json:"framed_ip"`
+	Type        string    `json:"type"`
+	Status      string    `json:"status"`
+	Mac         string    `json:"mac"`
+	Loc         string    `json:"loc"`
+	Gateway     string    `json:"gateway"`
+	Downspeed   int       `json:"downspeed"`
+	Upspeed     int       `json:"upspeed"`
+	Burstspeed  int       `json:"burstspeed"`
+	Duration    int       `json:"duration"`
+	DateEnd     time.Time `json:"date_end"`
+	DateExpires time.Time `json:"date_expires"`
+	PfConfigID  uint      `json:"pfconfig_id"`
 }
 
 type PfConfig struct {
