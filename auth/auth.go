@@ -80,6 +80,7 @@ type Sub struct {
 	Upspeed     int       `json:"upspeed"`
 	Burstspeed  int       `json:"burstspeed"`
 	Duration    int       `json:"duration"`
+	Priority    int       `json:"priority"`
 	DateEnd     time.Time `json:"date_end"`
 	DateExpires time.Time `json:"date_expires"`
 	PfConfigID  uint      `json:"pfconfig_id"`
