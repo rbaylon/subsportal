@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -40,19 +39,12 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
+	go auth.PfReloader(apitoken)
 	log.Printf("%s:%s", app_ip, app_port)
 	err = http.ListenAndServe(fmt.Sprintf("%s:%s", app_ip, app_port), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func getUnixConn() net.Conn {
-	c, err := net.Dial("unix", auth.GetEnvVariable("UNIX_SOCK"))
-	if err != nil {
-		log.Fatal("Dial error ", err)
-	}
-	return c
 }
 
 func serveTemplate(tmpl *template.Template) http.HandlerFunc {
@@ -85,18 +77,18 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			return
 		}
 		pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
-		err := pf["check"].SendCmd(getUnixConn())
+		err := pf["check"].SendCmd(auth.GetUnixConn())
 		if err == nil {
 			log.Println("pf.conf valid")
 			time.Sleep(time.Millisecond * 100)
-			pf["backup"].SendCmd(getUnixConn())
+			pf["backup"].SendCmd(auth.GetUnixConn())
 			time.Sleep(time.Millisecond * 100)
-			pf["move"].SendCmd(getUnixConn())
+			pf["move"].SendCmd(auth.GetUnixConn())
 			time.Sleep(time.Millisecond * 100)
-			err = pf["apply"].SendCmd(getUnixConn())
+			err = pf["apply"].SendCmd(auth.GetUnixConn())
 			if err != nil {
 				time.Sleep(time.Millisecond * 100)
-				pf["revert"].SendCmd(getUnixConn())
+				pf["revert"].SendCmd(auth.GetUnixConn())
 				log.Println("PF config reverted.")
 			}
 		} else {
