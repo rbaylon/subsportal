@@ -164,10 +164,9 @@ func PfReloader(t *string) {
 					pf["revert"].SendCmd(GetUnixConn())
 					log.Println("PF config reverted.")
 				}
-				delclient := &http.Client{}
 				delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/updatepf", nil)
-				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-				delres, _ := delclient.Do(delreq)
+				delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
+				delres, _ := client.Do(delreq)
 				time.Sleep(time.Millisecond * 100)
 				delres.Body.Close()
 			} else {
