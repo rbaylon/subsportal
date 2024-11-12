@@ -175,7 +175,7 @@ func PfReloader(t *string) {
 			}
 		}
 		res.Body.Close()
-		time.Sleep(300 * time.Second)
+		time.Sleep(120 * time.Second)
 	}
 }
 
