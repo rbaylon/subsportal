@@ -163,12 +163,13 @@ func PfReloader(t *string) {
 					time.Sleep(time.Millisecond * 100)
 					pf["revert"].SendCmd(GetUnixConn())
 					log.Println("PF config reverted.")
+				} else {
+					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/updatepf", nil)
+					delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
+					delres, _ := client.Do(delreq)
+					time.Sleep(time.Millisecond * 100)
+					delres.Body.Close()
 				}
-				delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/updatepf", nil)
-				delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-				delres, _ := client.Do(delreq)
-				time.Sleep(time.Millisecond * 100)
-				delres.Body.Close()
 			} else {
 				log.Println("PF config bad: ", err)
 				//ToDo: send sms alert
