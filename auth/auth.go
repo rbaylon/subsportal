@@ -68,7 +68,7 @@ func ValidateCode(code string, t *string) string {
 	return v
 }
 
-func PfReloader(t *string) {
+func PfReloader(t *string, lock *bool) {
 	var (
 		api_url = GetEnvVariable("API_URL")
 	)
@@ -80,11 +80,10 @@ func PfReloader(t *string) {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 		res, _ := client.Do(req)
 		if res.StatusCode == 200 {
-			lock := locker.GetLock()
-			for *lock {
+			for locker.GetLock(lock, "pfreloader") {
 				time.Sleep(50 * time.Millisecond)
 			}
-			*lock = true
+			locker.SetLock(lock, true, "pfreloader")
 			log.Println("New update found")
 			err := pf["check"].SendCmd(GetUnixConn())
 			if err == nil {
@@ -110,7 +109,7 @@ func PfReloader(t *string) {
 				log.Println("PF config bad: ", err)
 				//ToDo: send sms alert
 			}
-			*lock = false
+			locker.SetLock(lock, false, "pfreloader")
 		}
 		res.Body.Close()
 		time.Sleep(120 * time.Second)

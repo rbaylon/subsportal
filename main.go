@@ -21,6 +21,7 @@ func main() {
 		app_ip   = auth.GetEnvVariable("APP_IP")
 		app_port = auth.GetEnvVariable("APP_PORT")
 	)
+	locker.Lock = false
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 	files := []string{
@@ -35,13 +36,13 @@ func main() {
 		log.Print(err.Error())
 		return
 	}
-	http.HandleFunc("/", serveTemplate(tmpl))
+	http.HandleFunc("/", serveTemplate(tmpl, &locker.Lock))
 	token, err := auth.GetToken()
 	apitoken = token
 	if err != nil {
 		log.Println(err)
 	}
-	go auth.PfReloader(apitoken)
+	go auth.PfReloader(apitoken, &locker.Lock)
 	log.Printf("%s:%s", app_ip, app_port)
 	err = http.ListenAndServe(fmt.Sprintf("%s:%s", app_ip, app_port), nil)
 	if err != nil {
@@ -49,7 +50,7 @@ func main() {
 	}
 }
 
-func serveTemplate(tmpl *template.Template) http.HandlerFunc {
+func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		remote := strings.Split(r.RemoteAddr, ":")
 		log.Println("Captured: ", remote[0])
@@ -78,11 +79,10 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			tmpl.ExecuteTemplate(w, "errbase", nil)
 			return
 		}
-		lock := locker.GetLock()
-		for *lock {
+		for locker.GetLock(lock, "voucher") {
 			time.Sleep(50 * time.Millisecond)
 		}
-		*lock = true
+		locker.SetLock(lock, true, "voucher")
 		pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
 		err := pf["check"].SendCmd(auth.GetUnixConn())
 		if err == nil {
@@ -102,7 +102,7 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			log.Println("PF config bad: ", err)
 			//ToDo: send sms alert
 		}
-		*lock = false
+		locker.SetLock(lock, false, "voucher")
 		time.Sleep(time.Millisecond * 100)
 		//redirect to landing page instead of below
 		http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
