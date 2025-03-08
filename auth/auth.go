@@ -12,6 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/rbaylon/subsportal/cmd"
+	"github.com/rbaylon/subsportal/locker"
 )
 
 type Code struct {
@@ -79,6 +80,11 @@ func PfReloader(t *string) {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 		res, _ := client.Do(req)
 		if res.StatusCode == 200 {
+			lock := locker.GetLock()
+			for *lock {
+				time.Sleep(50 * time.Millisecond)
+			}
+			*lock = true
 			log.Println("New update found")
 			err := pf["check"].SendCmd(GetUnixConn())
 			if err == nil {
@@ -104,6 +110,7 @@ func PfReloader(t *string) {
 				log.Println("PF config bad: ", err)
 				//ToDo: send sms alert
 			}
+			*lock = false
 		}
 		res.Body.Close()
 		time.Sleep(120 * time.Second)

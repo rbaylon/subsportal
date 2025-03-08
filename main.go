@@ -11,6 +11,7 @@ import (
 
 	"github.com/rbaylon/subsportal/auth"
 	"github.com/rbaylon/subsportal/cmd"
+	"github.com/rbaylon/subsportal/locker"
 )
 
 var apitoken *string
@@ -77,6 +78,11 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			tmpl.ExecuteTemplate(w, "errbase", nil)
 			return
 		}
+		lock := locker.GetLock()
+		for *lock {
+			time.Sleep(50 * time.Millisecond)
+		}
+		*lock = true
 		pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
 		err := pf["check"].SendCmd(auth.GetUnixConn())
 		if err == nil {
@@ -96,6 +102,7 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 			log.Println("PF config bad: ", err)
 			//ToDo: send sms alert
 		}
+		*lock = false
 		time.Sleep(time.Millisecond * 100)
 		//redirect to landing page instead of below
 		http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
