@@ -5,11 +5,12 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/rbaylon/captiveportal/auth"
-	"github.com/rbaylon/captiveportal/cmd"
+	"github.com/rbaylon/subsportal/auth"
+	"github.com/rbaylon/subsportal/cmd"
 )
 
 var apitoken *string
@@ -69,7 +70,7 @@ func serveTemplate(tmpl *template.Template) http.HandlerFunc {
 
 		log.Println(data.Joinnum())
 		routerid := auth.GetEnvVariable("ROUTER_ID")
-		urlsuffix := data.Joinnum() + "/" + remote[0] + "/" + routerid
+		urlsuffix := url.QueryEscape(data.Joinnum()) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
 		result := auth.ValidateCode(urlsuffix, apitoken)
 		if result == "NotFound" {
 			log.Println("Code error: Not Found")
