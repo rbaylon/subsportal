@@ -50,11 +50,59 @@ func main() {
 	}
 }
 
+func validateCode(urlsuffix string, token *string, w http.ResponseWriter, lock *bool) error {
+	result := auth.ValidateCode(urlsuffix, token)
+	if result == "NotFound" {
+		log.Println("Code error: Not Found")
+		return fmt.Errorf("Code error: Not Found")
+	}
+	for locker.GetLock(lock, "voucher") {
+		time.Sleep(50 * time.Millisecond)
+	}
+	locker.SetLock(lock, true, "voucher")
+	pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
+	err := pf["check"].SendCmd(auth.GetUnixConn())
+	if err == nil {
+		log.Println("pf.conf valid")
+		time.Sleep(time.Millisecond * 100)
+		pf["backup"].SendCmd(auth.GetUnixConn())
+		time.Sleep(time.Millisecond * 100)
+		pf["move"].SendCmd(auth.GetUnixConn())
+		time.Sleep(time.Millisecond * 100)
+		err = pf["apply"].SendCmd(auth.GetUnixConn())
+		if err != nil {
+			time.Sleep(time.Millisecond * 100)
+			pf["revert"].SendCmd(auth.GetUnixConn())
+			log.Println("PF config reverted.")
+		}
+	} else {
+		log.Println("PF config bad: ", err)
+		//ToDo: send sms alert
+	}
+	locker.SetLock(lock, false, "voucher")
+	time.Sleep(time.Millisecond * 100)
+	return nil
+}
+
 func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		remote := strings.Split(r.RemoteAddr, ":")
+		routerid := auth.GetEnvVariable("ROUTER_ID")
 		log.Println("Captured: ", remote[0])
 		if r.Method != http.MethodPost {
+			cookie, err := r.Cookie("code")
+			if err != nil {
+				if err == http.ErrNoCookie {
+					log.Println("No cookie found!")
+				} else {
+					log.Println("Error retrieving cookie")
+				}
+			}
+			urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
+			cerr := validateCode(urlsuffix, apitoken, w, lock)
+			if cerr == nil {
+				http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
+			}
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
 		}
@@ -69,42 +117,18 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 			r.FormValue("seven"),
 			r.FormValue("eight"),
 		}
-
-		log.Println(data.Joinnum())
-		routerid := auth.GetEnvVariable("ROUTER_ID")
-		urlsuffix := url.QueryEscape(data.Joinnum()) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
-		result := auth.ValidateCode(urlsuffix, apitoken)
-		if result == "NotFound" {
-			log.Println("Code error: Not Found")
-			tmpl.ExecuteTemplate(w, "errbase", nil)
-			return
+		code := data.Joinnum()
+		log.Println(code)
+		urlsuffix := url.QueryEscape(code) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
+		validateCode(urlsuffix, apitoken, w, lock)
+		expiration := time.Now().Add(32 * 24 * time.Hour)
+		cookie := http.Cookie{
+			Name:     "code",
+			Value:    code,
+			HttpOnly: true,
+			Expires:  expiration,
 		}
-		for locker.GetLock(lock, "voucher") {
-			time.Sleep(50 * time.Millisecond)
-		}
-		locker.SetLock(lock, true, "voucher")
-		pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
-		err := pf["check"].SendCmd(auth.GetUnixConn())
-		if err == nil {
-			log.Println("pf.conf valid")
-			time.Sleep(time.Millisecond * 100)
-			pf["backup"].SendCmd(auth.GetUnixConn())
-			time.Sleep(time.Millisecond * 100)
-			pf["move"].SendCmd(auth.GetUnixConn())
-			time.Sleep(time.Millisecond * 100)
-			err = pf["apply"].SendCmd(auth.GetUnixConn())
-			if err != nil {
-				time.Sleep(time.Millisecond * 100)
-				pf["revert"].SendCmd(auth.GetUnixConn())
-				log.Println("PF config reverted.")
-			}
-		} else {
-			log.Println("PF config bad: ", err)
-			//ToDo: send sms alert
-		}
-		locker.SetLock(lock, false, "voucher")
-		time.Sleep(time.Millisecond * 100)
-		//redirect to landing page instead of below
+		http.SetCookie(w, &cookie)
 		http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
 	}
 }
