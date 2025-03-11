@@ -97,12 +97,13 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 				} else {
 					log.Println("Error retrieving cookie")
 				}
-			}
-			urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
-			cerr := validateCode(urlsuffix, apitoken, lock)
-			if cerr == nil {
-				http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
-				return
+			} else {
+				urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
+				cerr := validateCode(urlsuffix, apitoken, lock)
+				if cerr == nil {
+					http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
+					return
+				}
 			}
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
