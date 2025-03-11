@@ -50,7 +50,7 @@ func main() {
 	}
 }
 
-func validateCode(urlsuffix string, token *string, w http.ResponseWriter, lock *bool) error {
+func validateCode(urlsuffix string, token *string, lock *bool) error {
 	result := auth.ValidateCode(urlsuffix, token)
 	if result == "NotFound" {
 		log.Println("Code error: Not Found")
@@ -99,9 +99,10 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 				}
 			}
 			urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
-			cerr := validateCode(urlsuffix, apitoken, w, lock)
+			cerr := validateCode(urlsuffix, apitoken, lock)
 			if cerr == nil {
 				http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
+				return
 			}
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
@@ -120,7 +121,12 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 		code := data.Joinnum()
 		log.Println(code)
 		urlsuffix := url.QueryEscape(code) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
-		validateCode(urlsuffix, apitoken, w, lock)
+		cerr := validateCode(urlsuffix, apitoken, lock)
+		if cerr != nil {
+			log.Println(cerr)
+			tmpl.ExecuteTemplate(w, "errbase", nil)
+			return
+		}
 		expiration := time.Now().Add(32 * 24 * time.Hour)
 		cookie := http.Cookie{
 			Name:     "code",
