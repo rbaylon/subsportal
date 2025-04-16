@@ -98,12 +98,15 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 					log.Println("Error retrieving cookie")
 				}
 			} else {
+				log.Println("Cookie found, validating access")
 				urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
 				cerr := validateCode(urlsuffix, apitoken, lock)
 				if cerr == nil {
+					log.Println("Succuess")
 					http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
 					return
 				}
+				log.Println("Cookie invalid")
 			}
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
