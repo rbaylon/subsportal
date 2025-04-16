@@ -107,6 +107,14 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 					return
 				}
 				log.Println("Cookie invalid")
+				expire := time.Now().Add(-7 * 24 * time.Hour)
+				cookie := http.Cookie{
+					Name:     "code",
+					Value:    "",
+					HttpOnly: true,
+					Expires:  expire,
+				}
+				http.SetCookie(w, &cookie)
 			}
 			tmpl.ExecuteTemplate(w, "base", nil)
 			return
