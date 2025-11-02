@@ -3,7 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -52,7 +52,12 @@ func ValidateCode(code string, t *string) string {
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-	res, _ := client.Do(req)
+	res, err := client.Do(req)
+	if err != nil {
+		res.Body.Close()
+		log.Println(err.Error())
+		return err.Error()
+	}
 	defer res.Body.Close()
 	v := "active"
 	if res.StatusCode == 404 {
@@ -78,7 +83,12 @@ func PfReloader(t *string, lock *bool) {
 		client := &http.Client{}
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-		res, _ := client.Do(req)
+		res, autherr := client.Do(req)
+		if autherr != nil {
+			res.Body.Close()
+			log.Println(autherr.Error())
+			return
+		}
 		if res.StatusCode == 200 {
 			for locker.GetLock(lock, "pfreloader") {
 				time.Sleep(50 * time.Millisecond)
@@ -101,8 +111,13 @@ func PfReloader(t *string, lock *bool) {
 				} else {
 					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/updatepf", nil)
 					delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-					delres, _ := client.Do(delreq)
+					delres, upferr := client.Do(delreq)
+					if upferr != nil {
+						delres.Body.Close()
+						log.Println(upferr.Error())
+					}
 					time.Sleep(time.Millisecond * 100)
+					_, _ = io.Copy(io.Discard, delres.Body)
 					delres.Body.Close()
 				}
 			} else {
@@ -111,6 +126,7 @@ func PfReloader(t *string, lock *bool) {
 			}
 			locker.SetLock(lock, false, "pfreloader")
 		}
+		_, _ = io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 		time.Sleep(120 * time.Second)
 	}
@@ -126,11 +142,12 @@ func GetToken() (*string, error) {
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", api_auth))
 	res, err := client.Do(req)
-	defer res.Body.Close()
 	if err != nil {
+		log.Println(err.Error())
 		return nil, err
 	}
-	responseData, ioerr := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	responseData, ioerr := io.ReadAll(res.Body)
 	if ioerr != nil {
 		return nil, ioerr
 	}
