@@ -143,6 +143,7 @@ func GetToken() (*string, error) {
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", api_auth))
 	res, err := client.Do(req)
 	if err != nil {
+		res.Body.Close()
 		log.Println(err.Error())
 		return nil, err
 	}
