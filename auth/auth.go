@@ -84,6 +84,7 @@ func refreshToken() *string {
 			return nil
 		}
 		log.Println("Token refreshed")
+		startTime = time.Now()
 		return token
 	}
 	return nil
