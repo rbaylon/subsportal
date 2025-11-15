@@ -54,7 +54,7 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 	result := auth.ValidateCode(urlsuffix, token)
 	if result == "NotFound" {
 		log.Println("Code error: Not Found")
-		return fmt.Errorf("Code error: Not Found")
+		return fmt.Errorf("code error: not nound")
 	}
 	for locker.GetLock(lock, "voucher") {
 		time.Sleep(50 * time.Millisecond)
@@ -121,14 +121,14 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 		}
 
 		data := &auth.Code{
-			r.FormValue("one"),
-			r.FormValue("two"),
-			r.FormValue("three"),
-			r.FormValue("four"),
-			r.FormValue("five"),
-			r.FormValue("six"),
-			r.FormValue("seven"),
-			r.FormValue("eight"),
+			One:   r.FormValue("one"),
+			Two:   r.FormValue("two"),
+			Three: r.FormValue("three"),
+			Four:  r.FormValue("four"),
+			Five:  r.FormValue("five"),
+			Six:   r.FormValue("six"),
+			Seven: r.FormValue("seven"),
+			Eight: r.FormValue("eight"),
 		}
 		code := data.Joinnum()
 		log.Println(code)
