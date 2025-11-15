@@ -73,13 +73,34 @@ func ValidateCode(code string, t *string) string {
 	return v
 }
 
+var startTime time.Time
+
+func refreshToken() *string {
+	limit := 1440 * time.Minute // 1day
+	uptime := time.Since(startTime) * time.Minute
+	if uptime > limit {
+		token, err := GetToken()
+		if err != nil {
+			return nil
+		}
+		log.Println("Token refreshed")
+		return token
+	}
+	return nil
+}
+
 func PfReloader(t *string, lock *bool) {
+	startTime = time.Now()
 	var (
 		api_url = GetEnvVariable("API_URL")
 	)
 	url := api_url + "runtime/query/updatepf"
 	pf := cmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
 	for {
+		newtoken := refreshToken()
+		if newtoken != nil {
+			t = newtoken
+		}
 		client := &http.Client{}
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
