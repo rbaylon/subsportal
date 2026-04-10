@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/rbaylon/subsportal/cmd"
+	Acmd "github.com/rbaylon/arkgatecmd"
 	"github.com/rbaylon/subsportal/locker"
 )
 
@@ -96,7 +96,7 @@ func PfReloader(t *string, lock *bool) {
 		api_url = GetEnvVariable("API_URL")
 	)
 	url := api_url + "runtime/query/updatepf"
-	pf := cmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
+	pf := Acmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
 	for {
 		newtoken := refreshToken()
 		if newtoken != nil {

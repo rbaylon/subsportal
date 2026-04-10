@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/rbaylon/subsportal/auth"
-	"github.com/rbaylon/subsportal/cmd"
+	Acmd "github.com/rbaylon/arkgatecmd"
 	"github.com/rbaylon/subsportal/locker"
 )
 
@@ -60,7 +60,7 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	locker.SetLock(lock, true, "voucher")
-	pf := cmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
+	pf := Acmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
 	err := pf["check"].SendCmd(auth.GetUnixConn())
 	if err == nil {
 		log.Println("pf.conf valid")
