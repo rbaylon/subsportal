@@ -98,6 +98,8 @@ func PfReloader(t *string, lock *bool) {
 	)
 	url := api_url + "runtime/query/updatepf"
 	pf := Acmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
+	rid := GetEnvVariable("ROUTER_INDEX")
+	url = url + "/" + rid
 	for {
 		refreshToken(t)
 		client := &http.Client{}
@@ -129,7 +131,7 @@ func PfReloader(t *string, lock *bool) {
 					pf["revert"].SendCmd(GetUnixConn())
 					log.Println("PF config reverted.")
 				} else {
-					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/updatepf", nil)
+					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/"+rid, nil)
 					delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 					delres, upferr := client.Do(delreq)
 					if upferr != nil {
