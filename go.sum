@@ -4,3 +4,5 @@ github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
 github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
 github.com/rbaylon/arkgatecmd v1.1.1 h1:NlMKdBxpFrbK/H/2/fnS+ZtMyiBfZFuf0EMCsGKQmiA=
 github.com/rbaylon/arkgatecmd v1.1.1/go.mod h1:2+cGMUWHrOzsCoFVGwqrJmgB1qgoCmm+87ZAdMqlT+Y=
+github.com/rbaylon/arkgatecmd v1.1.2 h1:/uS5R1iHbP8bGN0YWPE3l72GX8KwRtRWIolU1QvJejg=
+github.com/rbaylon/arkgatecmd v1.1.2/go.mod h1:2+cGMUWHrOzsCoFVGwqrJmgB1qgoCmm+87ZAdMqlT+Y=
