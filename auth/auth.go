@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	Acmd "github.com/rbaylon/arkgatecmd"
 	"github.com/rbaylon/subsportal/locker"
@@ -75,19 +76,19 @@ func ValidateCode(code string, t *string) string {
 
 var startTime time.Time
 
-func refreshToken() *string {
-	limit := 1440 * time.Minute // 1day
-	uptime := time.Since(startTime) * time.Minute
-	if uptime > limit {
+func refreshToken(t *string) {
+	expired, err := CheckExpirationWithoutVerify(*t)
+	if err != nil {
+		log.Println(err)
+	}
+	if expired {
 		token, err := GetToken()
 		if err != nil {
-			return nil
+			log.Println(err)
 		}
 		log.Println("Token refreshed")
-		startTime = time.Now()
-		return token
+		t = token
 	}
-	return nil
 }
 
 func PfReloader(t *string, lock *bool) {
@@ -98,10 +99,7 @@ func PfReloader(t *string, lock *bool) {
 	url := api_url + "runtime/query/updatepf"
 	pf := Acmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
 	for {
-		newtoken := refreshToken()
-		if newtoken != nil {
-			t = newtoken
-		}
+		refreshToken(t)
 		client := &http.Client{}
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
@@ -186,4 +184,29 @@ func GetUnixConn() net.Conn {
 		log.Println("Dial error ", err)
 	}
 	return c
+}
+
+func CheckExpirationWithoutVerify(tokenStr string) (bool, error) {
+	parser := jwt.NewParser()
+	var claims jwt.MapClaims
+
+	// Parse unverified explicitly skips signature validation
+	_, _, err := parser.ParseUnverified(tokenStr, &claims)
+	if err != nil {
+		return false, err
+	}
+
+	// Extract the standard 'exp' claim safely
+	exp, err := claims.GetExpirationTime()
+	if err != nil {
+		return false, fmt.Errorf("failed to get expiration: %w", err)
+	}
+
+	if exp == nil {
+		return false, fmt.Errorf("exp claim is missing from token")
+	}
+
+	// Compare token expiration timestamp with current system time
+	isExpired := exp.Before(time.Now())
+	return isExpired, nil
 }
