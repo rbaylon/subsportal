@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rbaylon/subsportal/auth"
 	Acmd "github.com/rbaylon/arkgatecmd"
+	"github.com/rbaylon/subsportal/auth"
 	"github.com/rbaylon/subsportal/locker"
 )
 
@@ -27,8 +27,6 @@ func main() {
 	files := []string{
 		"./templates/base.tmpl",
 		"./templates/index.tmpl",
-		"./templates/errindex.tmpl",
-		"./templates/errbase.tmpl",
 	}
 
 	tmpl, err := template.ParseFiles(files...)
@@ -89,6 +87,10 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 		remote := strings.Split(r.RemoteAddr, ":")
 		routerid := auth.GetEnvVariable("ROUTER_ID")
 		log.Println("Captured: ", remote[0])
+		type errmsg struct {
+			Message string
+		}
+		msg := errmsg{Message: ""}
 		if r.Method != http.MethodPost {
 			cookie, err := r.Cookie("code")
 			if err != nil {
@@ -116,27 +118,17 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 				}
 				http.SetCookie(w, &cookie)
 			}
-			tmpl.ExecuteTemplate(w, "base", nil)
+			tmpl.ExecuteTemplate(w, "base", &msg)
 			return
 		}
-
-		data := &auth.Code{
-			One:   r.FormValue("one"),
-			Two:   r.FormValue("two"),
-			Three: r.FormValue("three"),
-			Four:  r.FormValue("four"),
-			Five:  r.FormValue("five"),
-			Six:   r.FormValue("six"),
-			Seven: r.FormValue("seven"),
-			Eight: r.FormValue("eight"),
-		}
-		code := data.Joinnum()
+		code := r.FormValue("voucher")
 		log.Println(code)
 		urlsuffix := url.QueryEscape(code) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
 		cerr := validateCode(urlsuffix, apitoken, lock)
 		if cerr != nil {
 			log.Println(cerr)
-			tmpl.ExecuteTemplate(w, "errbase", nil)
+			msg := errmsg{Message: "yes"}
+			tmpl.ExecuteTemplate(w, "base", &msg)
 			return
 		}
 		expiration := time.Now().Add(32 * 24 * time.Hour)
