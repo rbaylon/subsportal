@@ -1,0 +1,22 @@
+#!/bin/ksh
+#
+# $OpenBSD$
+#
+# rc.d script for captiveportal
+
+daemon_name="captiveportal"
+daemon_user="admin"
+daemon_execdir="/home/${daemon_user}/${daemon_name}"
+daemon="captiveportal"
+daemon_logger="daemon.info"
+pidfile="/var/run/${daemon_name}.pid"
+
+. /etc/rc.d/rc.subr
+
+pexp="${daemon}"
+
+rc_reload=NO
+
+rc_bg=YES
+
+rc_cmd $1
