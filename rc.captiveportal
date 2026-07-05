@@ -7,7 +7,7 @@
 daemon_name="captiveportal"
 daemon_user="admin"
 daemon_execdir="/home/${daemon_user}/${daemon_name}"
-daemon="captiveportal"
+daemon="${daemon_execdir}/captiveportal"
 daemon_logger="daemon.info"
 pidfile="/var/run/${daemon_name}.pid"
 
