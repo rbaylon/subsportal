@@ -19,6 +19,7 @@ install:
 dist:
 	make build
 	make install
+	cp rc.${app} ${distdir}/
 	cd ${distdir}
 	cd ..
 	tar -czvf ${app}.tar.gz ${app}
