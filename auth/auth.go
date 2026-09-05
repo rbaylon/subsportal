@@ -117,18 +117,18 @@ func PfReloader(t *string, lock *bool) {
 			}
 			locker.SetLock(lock, true, "pfreloader")
 			log.Println("New update found")
-			err := pf["check"].SendCmd(GetUnixConn())
+			err := SendUnixCmd(pf["check"])
 			if err == nil {
 				log.Println("pf.conf valid")
 				time.Sleep(time.Millisecond * 100)
-				pf["backup"].SendCmd(GetUnixConn())
+				SendUnixCmd(pf["backup"])
 				time.Sleep(time.Millisecond * 100)
-				pf["move"].SendCmd(GetUnixConn())
+				SendUnixCmd(pf["move"])
 				time.Sleep(time.Millisecond * 100)
-				err = pf["apply"].SendCmd(GetUnixConn())
+				err = SendUnixCmd(pf["apply"])
 				if err != nil {
 					time.Sleep(time.Millisecond * 100)
-					pf["revert"].SendCmd(GetUnixConn())
+					SendUnixCmd(pf["revert"])
 					log.Println("PF config reverted.")
 				} else {
 					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/"+rid, nil)
@@ -184,8 +184,23 @@ func GetUnixConn() net.Conn {
 	c, err := net.Dial("unix", GetEnvVariable("UNIX_SOCK"))
 	if err != nil {
 		log.Println("Dial error ", err)
+		return nil
 	}
 	return c
+}
+
+// SendUnixCmd dials arkgated's Unix socket and sends cmd over it, returning
+// an error instead of letting cmd.SendCmd panic on a nil connection when the
+// socket isn't reachable (e.g. arkgated is down or restarting - this is
+// exactly what happened in the 2026-09-05 incident: arkgated crashed, and
+// every caller here that used cmd.SendCmd(GetUnixConn()) directly panicked
+// on the nil conn instead of just logging and moving on).
+func SendUnixCmd(cmd *Acmd.Arkcmd) error {
+	conn := GetUnixConn()
+	if conn == nil {
+		return fmt.Errorf("arkgated unix socket unavailable")
+	}
+	return cmd.SendCmd(conn)
 }
 
 func CheckExpirationWithoutVerify(tokenStr string) (bool, error) {

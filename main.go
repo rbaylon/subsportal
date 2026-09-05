@@ -59,18 +59,18 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 	}
 	locker.SetLock(lock, true, "voucher")
 	pf := Acmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
-	err := pf["check"].SendCmd(auth.GetUnixConn())
+	err := auth.SendUnixCmd(pf["check"])
 	if err == nil {
 		log.Println("pf.conf valid")
 		time.Sleep(time.Millisecond * 100)
-		pf["backup"].SendCmd(auth.GetUnixConn())
+		auth.SendUnixCmd(pf["backup"])
 		time.Sleep(time.Millisecond * 100)
-		pf["move"].SendCmd(auth.GetUnixConn())
+		auth.SendUnixCmd(pf["move"])
 		time.Sleep(time.Millisecond * 100)
-		err = pf["apply"].SendCmd(auth.GetUnixConn())
+		err = auth.SendUnixCmd(pf["apply"])
 		if err != nil {
 			time.Sleep(time.Millisecond * 100)
-			pf["revert"].SendCmd(auth.GetUnixConn())
+			auth.SendUnixCmd(pf["revert"])
 			log.Println("PF config reverted.")
 		}
 	} else {
