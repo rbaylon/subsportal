@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -117,18 +119,18 @@ func PfReloader(t *string, lock *bool) {
 			}
 			locker.SetLock(lock, true, "pfreloader")
 			log.Println("New update found")
-			err := SendUnixCmd(pf["check"])
+			err := SendArkgateCmd(pf["check"])
 			if err == nil {
 				log.Println("pf.conf valid")
 				time.Sleep(time.Millisecond * 100)
-				SendUnixCmd(pf["backup"])
+				SendArkgateCmd(pf["backup"])
 				time.Sleep(time.Millisecond * 100)
-				SendUnixCmd(pf["move"])
+				SendArkgateCmd(pf["move"])
 				time.Sleep(time.Millisecond * 100)
-				err = SendUnixCmd(pf["apply"])
+				err = SendArkgateCmd(pf["apply"])
 				if err != nil {
 					time.Sleep(time.Millisecond * 100)
-					SendUnixCmd(pf["revert"])
+					SendArkgateCmd(pf["revert"])
 					log.Println("PF config reverted.")
 				} else {
 					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/"+rid, nil)
@@ -180,8 +182,36 @@ func GetToken() (*string, error) {
 	return &t.Jwt, nil
 }
 
-func GetUnixConn() net.Conn {
-	c, err := net.Dial("unix", GetEnvVariable("UNIX_SOCK"))
+// arkgateTLSConfig builds the mTLS client config for talking to arkgated:
+// our client cert/key (arkgated authenticates us) plus the CA that signed
+// arkgated's server cert (we authenticate it back).
+func arkgateTLSConfig() (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(GetEnvVariable("ARKGATE_TLS_CERT"), GetEnvVariable("ARKGATE_TLS_KEY"))
+	if err != nil {
+		return nil, fmt.Errorf("loading arkgate client cert/key: %w", err)
+	}
+	caPEM, err := os.ReadFile(GetEnvVariable("ARKGATE_TLS_CA"))
+	if err != nil {
+		return nil, fmt.Errorf("reading arkgate CA cert: %w", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("no certs parsed from arkgate CA file")
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caPool,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
+func GetArkgateConn() net.Conn {
+	tlsConfig, err := arkgateTLSConfig()
+	if err != nil {
+		log.Println("arkgate TLS config error: ", err)
+		return nil
+	}
+	c, err := tls.Dial("tcp", GetEnvVariable("ARKGATE_ADDR"), tlsConfig)
 	if err != nil {
 		log.Println("Dial error ", err)
 		return nil
@@ -189,16 +219,16 @@ func GetUnixConn() net.Conn {
 	return c
 }
 
-// SendUnixCmd dials arkgated's Unix socket and sends cmd over it, returning
+// SendArkgateCmd dials arkgated over mTLS and sends cmd over it, returning
 // an error instead of letting cmd.SendCmd panic on a nil connection when the
-// socket isn't reachable (e.g. arkgated is down or restarting - this is
+// daemon isn't reachable (e.g. arkgated is down or restarting - this is
 // exactly what happened in the 2026-09-05 incident: arkgated crashed, and
-// every caller here that used cmd.SendCmd(GetUnixConn()) directly panicked
+// every caller here that used cmd.SendCmd(GetArkgateConn()) directly panicked
 // on the nil conn instead of just logging and moving on).
-func SendUnixCmd(cmd *Acmd.Arkcmd) error {
-	conn := GetUnixConn()
+func SendArkgateCmd(cmd *Acmd.Arkcmd) error {
+	conn := GetArkgateConn()
 	if conn == nil {
-		return fmt.Errorf("arkgated unix socket unavailable")
+		return fmt.Errorf("arkgated unavailable")
 	}
 	return cmd.SendCmd(conn)
 }
