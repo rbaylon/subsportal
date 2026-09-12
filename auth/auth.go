@@ -99,7 +99,7 @@ func PfReloader(t *string, lock *bool) {
 		api_url = GetEnvVariable("API_URL")
 	)
 	url := api_url + "runtime/query/updatepf"
-	pf := Acmd.GetPFcmds(GetEnvVariable("RUN_DIR"))
+	pf := Acmd.GetPFcmds("/tmp/")
 	rid := GetEnvVariable("ROUTER_INDEX")
 	url = url + "/" + rid
 	for {
