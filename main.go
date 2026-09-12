@@ -58,7 +58,7 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	locker.SetLock(lock, true, "voucher")
-	pf := Acmd.GetPFcmds(auth.GetEnvVariable("RUN_DIR"))
+	pf := Acmd.GetPFcmds("/tmp/")
 	err := auth.SendArkgateCmd(pf["check"])
 	if err == nil {
 		log.Println("pf.conf valid")
