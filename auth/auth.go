@@ -205,7 +205,20 @@ func arkgateTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
+// GetArkgateConn connects to arkgated's IPC listener, preferring the local
+// Unix domain socket when ARKGATE_SOCKET is set (subsportal and arkgated
+// running on the same host - no PKI material needed, trust is filesystem
+// permissions) and falling back to mutual TLS over the network otherwise,
+// which is what lets arkgated run on a separate host.
 func GetArkgateConn() net.Conn {
+	if sockPath := GetEnvVariable("ARKGATE_SOCKET"); sockPath != "" {
+		c, err := net.Dial("unix", sockPath)
+		if err == nil {
+			return c
+		}
+		log.Println("arkgate unix socket dial error, falling back to mTLS: ", err)
+	}
+
 	tlsConfig, err := arkgateTLSConfig()
 	if err != nil {
 		log.Println("arkgate TLS config error: ", err)
