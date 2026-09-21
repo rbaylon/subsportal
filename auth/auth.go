@@ -38,6 +38,14 @@ type Token struct {
 	Jwt  string
 }
 
+// apiTimeout bounds calls to the srvcman API (API_URL) for the same reason
+// arkgateTimeout bounds arkgated calls: without it, an unresponsive srvcman
+// leaves client.Do blocked forever, leaking the calling goroutine - on the
+// request path (ValidateCode) that's one leaked goroutine per guest
+// request, and in PfReloader's unrecovered background goroutine it stalls
+// pf reloads and token refresh indefinitely with no way to recover.
+const apiTimeout = 10 * time.Second
+
 func GetEnvVariable(key string) string {
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -52,16 +60,16 @@ func ValidateCode(code string, t *string) string {
 	)
 	url := api_url + "vouchers/value/" + code
 	log.Println(url)
-	client := &http.Client{}
+	client := &http.Client{Timeout: apiTimeout}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 	res, err := client.Do(req)
 	if err != nil {
-		res.Body.Close()
 		log.Println(err.Error())
 		return err.Error()
 	}
 	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, res.Body)
 	v := "active"
 	if res.StatusCode == 404 {
 		v = "NotFound"
@@ -104,12 +112,11 @@ func PfReloader(t *string, lock *bool) {
 	url = url + "/" + rid
 	for {
 		refreshToken(t)
-		client := &http.Client{}
+		client := &http.Client{Timeout: apiTimeout}
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 		res, autherr := client.Do(req)
 		if autherr != nil {
-			res.Body.Close()
 			log.Println(autherr.Error())
 			return
 		}
@@ -137,12 +144,12 @@ func PfReloader(t *string, lock *bool) {
 					delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 					delres, upferr := client.Do(delreq)
 					if upferr != nil {
-						delres.Body.Close()
 						log.Println(upferr.Error())
+					} else {
+						time.Sleep(time.Millisecond * 100)
+						_, _ = io.Copy(io.Discard, delres.Body)
+						delres.Body.Close()
 					}
-					time.Sleep(time.Millisecond * 100)
-					_, _ = io.Copy(io.Discard, delres.Body)
-					delres.Body.Close()
 				}
 			} else {
 				log.Println("PF config bad: ", err)
@@ -162,12 +169,11 @@ func GetToken() (*string, error) {
 		api_url  = GetEnvVariable("API_URL")
 	)
 	url := api_url + "login"
-	client := &http.Client{}
+	client := &http.Client{Timeout: apiTimeout}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", api_auth))
 	res, err := client.Do(req)
 	if err != nil {
-		res.Body.Close()
 		log.Println(err.Error())
 		return nil, err
 	}
@@ -205,6 +211,17 @@ func arkgateTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
+// arkgateTimeout bounds how long a single Arkcmd round-trip (connect, write,
+// read reply) may take. Without a deadline, a connection to an arkgated that
+// accepts the connection but never replies (hung, overloaded, or a bad
+// actor) leaves cmd.SendCmd blocked in conn.Read forever - its
+// "defer conn.Close()" never runs, so the goroutine and its socket never
+// get released. validateCode alone can open up to 5 of these per voucher
+// submission, each on its own request goroutine, so that leak is unbounded
+// under load. Setting a deadline here guarantees Read/Write eventually fail
+// and SendCmd returns, closing the connection.
+const arkgateTimeout = 5 * time.Second
+
 // GetArkgateConn connects to arkgated's IPC listener, preferring the local
 // Unix domain socket when ARKGATE_SOCKET is set (subsportal and arkgated
 // running on the same host - no PKI material needed, trust is filesystem
@@ -214,7 +231,7 @@ func GetArkgateConn() net.Conn {
 	if sockPath := GetEnvVariable("ARKGATE_SOCKET"); sockPath != "" {
 		c, err := net.Dial("unix", sockPath)
 		if err == nil {
-			return c
+			return withArkgateDeadline(c)
 		}
 		log.Println("arkgate unix socket dial error, falling back to mTLS: ", err)
 	}
@@ -229,7 +246,18 @@ func GetArkgateConn() net.Conn {
 		log.Println("Dial error ", err)
 		return nil
 	}
-	return c
+	return withArkgateDeadline(c)
+}
+
+// withArkgateDeadline applies arkgateTimeout to conn so a hung arkgated
+// can't block its caller (and leak the connection) indefinitely.
+func withArkgateDeadline(conn net.Conn) net.Conn {
+	if err := conn.SetDeadline(time.Now().Add(arkgateTimeout)); err != nil {
+		log.Println("arkgate set deadline error: ", err)
+		conn.Close()
+		return nil
+	}
+	return conn
 }
 
 // SendArkgateCmd dials arkgated over mTLS and sends cmd over it, returning
