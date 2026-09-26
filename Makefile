@@ -1,5 +1,5 @@
 app=captiveportal
-distdir=$(HOME)/${app}
+distdir=/usr/local/arkgate/${app}
 
 build:
 	go mod tidy
@@ -19,10 +19,8 @@ dist:
 	make build
 	make install
 	cp rc.${app} ${distdir}/
-	cd ${distdir}
-	cd ..
-	tar -czvf ${app}.tar.gz ${app}
-	ls -l ${app}.tar.gz
+	tar -C /usr/local/arkgate/ -czvf /usr/local/arkgate/${app}.tar.gz ${app}
+	ls -l /usr/local/arkgate/${app}.tar.gz
 
 clean:
 	rm -rf ${distdir}
