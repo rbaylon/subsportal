@@ -10,7 +10,11 @@
     {{ end }}
 
     <form action="/login" method="post">
-      <input type="text" name="voucher" placeholder="Enter Voucher Code" required>
+      <input type="text" name="voucher" placeholder="Enter Voucher Code" required
+        maxlength="20" pattern="[A-Za-z0-9]{1,20}"
+        title="Letters and numbers only, up to 20 characters"
+        autocomplete="off" autocapitalize="off" spellcheck="false"
+        oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'')">
       <button type="submit">Connect</button>
     </form>
     <div class="footer">
