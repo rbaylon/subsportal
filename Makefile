@@ -1,5 +1,5 @@
 app=captiveportal
-version=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+version!=git describe --tags --always
 distdir=/usr/local/arkgate/${app}
 
 build:
