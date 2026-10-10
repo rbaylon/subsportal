@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -46,11 +47,19 @@ type Token struct {
 // pf reloads and token refresh indefinitely with no way to recover.
 const apiTimeout = 10 * time.Second
 
+var envOnce sync.Once
+
+// GetEnvVariable loads .env exactly once (not on every call) and reads the
+// given key from the process environment. Loading on every call meant any
+// transient failure to re-read .env (permissions blip, NFS hiccup, etc.)
+// would log.Fatal and kill the whole server on the very next request, since
+// serveTemplate calls this for ROUTER_ID on every hit.
 func GetEnvVariable(key string) string {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatal("Error loading .env file", err)
-	}
+	envOnce.Do(func() {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Fatal("Error loading .env file", err)
+		}
+	})
 	return os.Getenv(key)
 }
 
@@ -61,7 +70,11 @@ func ValidateCode(code string, t *string) string {
 	url := api_url + "vouchers/value/" + code
 	log.Println(url)
 	client := &http.Client{Timeout: apiTimeout}
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err.Error())
+		return err.Error()
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 	res, err := client.Do(req)
 	if err != nil {
@@ -86,19 +99,28 @@ func ValidateCode(code string, t *string) string {
 
 var startTime time.Time
 
+// refreshToken writes a freshly-fetched JWT through t, not into it, so the
+// update is visible to every caller sharing that pointer (PfReloader's own
+// *t and main.go's apitoken both point at the same string). A plain
+// "t = token" reassignment here only rebound this function's local copy of
+// the pointer and never reached either of them - the token effectively
+// never refreshed for the life of the process.
 func refreshToken(t *string) {
 	expired, err := CheckExpirationWithoutVerify(*t)
 	if err != nil {
 		log.Println(err)
+		return
 	}
-	if expired {
-		token, err := GetToken()
-		if err != nil {
-			log.Println(err)
-		}
-		log.Println("Token refreshed")
-		t = token
+	if !expired {
+		return
 	}
+	token, err := GetToken()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	*t = *token
+	log.Println("Token refreshed")
 }
 
 func PfReloader(t *string, lock *bool) {
@@ -113,7 +135,11 @@ func PfReloader(t *string, lock *bool) {
 	for {
 		refreshToken(t)
 		client := &http.Client{Timeout: apiTimeout}
-		req, _ := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			log.Println(err)
+			return
+		}
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
 		res, autherr := client.Do(req)
 		if autherr != nil {
@@ -126,33 +152,43 @@ func PfReloader(t *string, lock *bool) {
 			}
 			locker.SetLock(lock, true, "pfreloader")
 			log.Println("New update found")
-			err := SendArkgateCmd(pf["check"])
-			if err == nil {
+			pferr := SendArkgateCmd(pf["check"])
+			if pferr == nil {
 				log.Println("pf.conf valid")
 				time.Sleep(time.Millisecond * 100)
-				SendArkgateCmd(pf["backup"])
+				if err := SendArkgateCmd(pf["backup"]); err != nil {
+					log.Println("pf backup failed: ", err)
+				}
 				time.Sleep(time.Millisecond * 100)
-				SendArkgateCmd(pf["move"])
+				if err := SendArkgateCmd(pf["move"]); err != nil {
+					log.Println("pf move failed: ", err)
+				}
 				time.Sleep(time.Millisecond * 100)
-				err = SendArkgateCmd(pf["apply"])
-				if err != nil {
+				pferr = SendArkgateCmd(pf["apply"])
+				if pferr != nil {
 					time.Sleep(time.Millisecond * 100)
-					SendArkgateCmd(pf["revert"])
+					if err := SendArkgateCmd(pf["revert"]); err != nil {
+						log.Println("pf revert failed: ", err)
+					}
 					log.Println("PF config reverted.")
 				} else {
-					delreq, _ := http.NewRequest("GET", api_url+"runtime/delete/"+rid, nil)
-					delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
-					delres, upferr := client.Do(delreq)
-					if upferr != nil {
-						log.Println(upferr.Error())
+					delreq, err := http.NewRequest("GET", api_url+"runtime/delete/"+rid, nil)
+					if err != nil {
+						log.Println(err)
 					} else {
-						time.Sleep(time.Millisecond * 100)
-						_, _ = io.Copy(io.Discard, delres.Body)
-						delres.Body.Close()
+						delreq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *t))
+						delres, upferr := client.Do(delreq)
+						if upferr != nil {
+							log.Println(upferr.Error())
+						} else {
+							time.Sleep(time.Millisecond * 100)
+							_, _ = io.Copy(io.Discard, delres.Body)
+							delres.Body.Close()
+						}
 					}
 				}
 			} else {
-				log.Println("PF config bad: ", err)
+				log.Println("PF config bad: ", pferr)
 				//ToDo: send sms alert
 			}
 			locker.SetLock(lock, false, "pfreloader")
@@ -170,7 +206,11 @@ func GetToken() (*string, error) {
 	)
 	url := api_url + "login"
 	client := &http.Client{Timeout: apiTimeout}
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err.Error())
+		return nil, err
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", api_auth))
 	res, err := client.Do(req)
 	if err != nil {
@@ -182,9 +222,14 @@ func GetToken() (*string, error) {
 	if ioerr != nil {
 		return nil, ioerr
 	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("login failed: status %d: %s", res.StatusCode, responseData)
+	}
 
 	var t Token
-	json.Unmarshal(responseData, &t)
+	if err := json.Unmarshal(responseData, &t); err != nil {
+		return nil, fmt.Errorf("parsing login response: %w", err)
+	}
 	return &t.Jwt, nil
 }
 

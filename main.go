@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,15 +32,19 @@ func main() {
 
 	tmpl, err := template.ParseFiles(files...)
 	if err != nil {
-		log.Print(err.Error())
-		return
+		log.Fatal(err)
 	}
 	http.HandleFunc("/", serveTemplate(tmpl, &locker.Lock))
+
 	token, err := auth.GetToken()
-	apitoken = token
 	if err != nil {
-		log.Println(err)
+		// apitoken stays nil below if we don't bail here, and every
+		// subsequent request/reload would dereference it and panic -
+		// fail fast instead and let the rc.d/daemon_manager watchdog
+		// restart us once the API is reachable again.
+		log.Fatal(err)
 	}
+	apitoken = token
 	go auth.PfReloader(apitoken, &locker.Lock)
 	log.Printf("%s:%s", app_ip, app_port)
 	err = http.ListenAndServe(fmt.Sprintf("%s:%s", app_ip, app_port), nil)
@@ -49,10 +54,13 @@ func main() {
 }
 
 func validateCode(urlsuffix string, token *string, lock *bool) error {
+	if token == nil {
+		return fmt.Errorf("no api token available")
+	}
 	result := auth.ValidateCode(urlsuffix, token)
 	if result == "NotFound" {
 		log.Println("Code error: Not Found")
-		return fmt.Errorf("code error: not nound")
+		return fmt.Errorf("code error: not found")
 	}
 	for locker.GetLock(lock, "voucher") {
 		time.Sleep(50 * time.Millisecond)
@@ -63,14 +71,20 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 	if err == nil {
 		log.Println("pf.conf valid")
 		time.Sleep(time.Millisecond * 100)
-		auth.SendArkgateCmd(pf["backup"])
+		if err := auth.SendArkgateCmd(pf["backup"]); err != nil {
+			log.Println("pf backup failed: ", err)
+		}
 		time.Sleep(time.Millisecond * 100)
-		auth.SendArkgateCmd(pf["move"])
+		if err := auth.SendArkgateCmd(pf["move"]); err != nil {
+			log.Println("pf move failed: ", err)
+		}
 		time.Sleep(time.Millisecond * 100)
 		err = auth.SendArkgateCmd(pf["apply"])
 		if err != nil {
 			time.Sleep(time.Millisecond * 100)
-			auth.SendArkgateCmd(pf["revert"])
+			if rerr := auth.SendArkgateCmd(pf["revert"]); rerr != nil {
+				log.Println("pf revert failed: ", rerr)
+			}
 			log.Println("PF config reverted.")
 		}
 	} else {
@@ -84,9 +98,13 @@ func validateCode(urlsuffix string, token *string, lock *bool) error {
 
 func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		remote := strings.Split(r.RemoteAddr, ":")
+		remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			log.Println("Could not parse remote address ", r.RemoteAddr, ": ", err)
+			remoteIP = r.RemoteAddr
+		}
 		routerid := auth.GetEnvVariable("ROUTER_ID")
-		log.Println("Captured: ", remote[0])
+		log.Println("Captured: ", remoteIP)
 		type errmsg struct {
 			Message string
 		}
@@ -97,38 +115,50 @@ func serveTemplate(tmpl *template.Template, lock *bool) http.HandlerFunc {
 				if err == http.ErrNoCookie {
 					log.Println("No cookie found!")
 				} else {
-					log.Println("Error retrieving cookie")
+					log.Println("Error retrieving cookie: ", err)
 				}
 			} else {
 				log.Println("Cookie found, validating access")
-				urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
+				urlsuffix := url.QueryEscape(cookie.Value) + "/" + url.QueryEscape(remoteIP) + "/" + routerid
 				cerr := validateCode(urlsuffix, apitoken, lock)
 				if cerr == nil {
-					log.Println("Succuess")
+					log.Println("Success")
 					http.Redirect(w, r, "https://www.google.com", http.StatusSeeOther)
 					return
 				}
-				log.Println("Cookie invalid")
+				log.Println("Cookie invalid: ", cerr)
 				expire := time.Now().Add(-7 * 24 * time.Hour)
-				cookie := http.Cookie{
+				expiredCookie := http.Cookie{
 					Name:     "code",
 					Value:    "",
 					HttpOnly: true,
 					Expires:  expire,
 				}
-				http.SetCookie(w, &cookie)
+				http.SetCookie(w, &expiredCookie)
 			}
-			tmpl.ExecuteTemplate(w, "base", &msg)
+			if err := tmpl.ExecuteTemplate(w, "base", &msg); err != nil {
+				log.Println("Template execution error: ", err)
+			}
 			return
 		}
-		code := r.FormValue("voucher")
+		code := strings.TrimSpace(r.FormValue("voucher"))
 		log.Println(code)
-		urlsuffix := url.QueryEscape(code) + "/" + url.QueryEscape(remote[0]) + "/" + routerid
+		if code == "" {
+			log.Println("Empty voucher code submitted")
+			msg := errmsg{Message: "yes"}
+			if err := tmpl.ExecuteTemplate(w, "base", &msg); err != nil {
+				log.Println("Template execution error: ", err)
+			}
+			return
+		}
+		urlsuffix := url.QueryEscape(code) + "/" + url.QueryEscape(remoteIP) + "/" + routerid
 		cerr := validateCode(urlsuffix, apitoken, lock)
 		if cerr != nil {
 			log.Println(cerr)
 			msg := errmsg{Message: "yes"}
-			tmpl.ExecuteTemplate(w, "base", &msg)
+			if err := tmpl.ExecuteTemplate(w, "base", &msg); err != nil {
+				log.Println("Template execution error: ", err)
+			}
 			return
 		}
 		expiration := time.Now().Add(32 * 24 * time.Hour)
